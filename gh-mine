@@ -328,22 +328,23 @@ while IFS=$'\t' read -r repo num title draft updated created url ci_state; do
         title_color="$RESET"
     fi
 
-    # CI status glyph + color (Nerd Font / emoji)
+    # CI status glyph + color (Nerd Font)
+    # nf-oct-check, nf-oct-x, nf-oct-clock, nf-oct-dash
     case "$ci_state" in
         SUCCESS)
-            ci_text=""
+            ci_text=$'\uf00c'
             ci_color="$GREEN"
             ;;
         FAILURE|ERROR)
-            ci_text=""
+            ci_text=$'\uf00d'
             ci_color="$RED"
             ;;
         PENDING|EXPECTED)
-            ci_text=""
+            ci_text=$'\uf017'
             ci_color="$YELLOW"
             ;;
         *)
-            ci_text="·"
+            ci_text=$'\uf068'
             ci_color="$GRAY"
             ;;
     esac
@@ -354,7 +355,10 @@ while IFS=$'\t' read -r repo num title draft updated created url ci_state; do
     repo_padded=$(printf "%-${max_repo}s" "$repo_display")
     num_padded=$(printf "%-${max_num}s" "$num_text")
     title_padded=$(printf "%-${max_title}s" "$title")
-    ci_padded=$(printf "%-${max_ci}s" "$ci_text")
+    # CI glyph is a single Nerd Font codepoint (1 terminal cell) but bash
+    # printf pads by byte count, not cell width — so we pad manually to
+    # keep the following columns aligned.
+    ci_padded="${ci_text}$(printf '%*s' $(( max_ci - 1 )) '')"
     date_padded=$(printf "%-${max_date}s" "$updated_short")
     age_padded=$(printf "%-${max_age}s" "$age_text")
 
