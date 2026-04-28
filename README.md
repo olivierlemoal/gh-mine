@@ -1,6 +1,6 @@
 # gh-mine
 
-> Glance at your open GitHub pull requests across all your repos in under 2 seconds.
+> Glance at your open GitHub pull requests across all your repos.
 
 A minimalist `gh` extension that prints a colored cross-repo table of your open
 PRs and lets you pick one with `gum`. Designed for the "where do my PRs stand
@@ -8,15 +8,10 @@ right now?" use case — no full-screen TUI, no waiting.
 
 ## Why?
 
-[`gh-dash`](https://github.com/dlvhdr/gh-dash) is great but takes ~6 seconds to
-render and is a full-screen TUI. `gh pr list` only works in the current repo.
-`gh-mine` fills the gap:
-
-| Tool          | Time to first PRs | Scope        | UI                |
-| ------------- | ----------------- | ------------ | ----------------- |
-| `gh pr list`  | ~1.5s             | Current repo | Plain table       |
-| **`gh mine`** | **~1.8s**         | Cross-repo   | Table + picker    |
-| `gh-dash`     | ~5.6s             | Cross-repo   | Full-screen TUI   |
+[`gh-dash`](https://github.com/dlvhdr/gh-dash) is a great full-screen TUI for
+managing PRs and issues. `gh pr list` only works in the current repo.
+`gh-mine` fills the gap: a fast colored cross-repo table you can glance at,
+plus an optional `gum` picker — no full-screen TUI to wait for.
 
 ## Install
 
@@ -66,7 +61,7 @@ sudo apt install jq
 
 ## Features
 
-- **Sub-2s startup** — single `gh search` query, no TUI to initialize.
+- **Fast** — single `gh search` query, no TUI to initialize.
 - **Cross-repo** — shows all your open PRs across every repo you contribute to.
 - **Color-coded age** — `fresh` (green), `old (>1mo)` (yellow),
   `⚠ stale (>6mo)` (red).
