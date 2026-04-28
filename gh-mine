@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 
 # --- Defaults ---
 OWNER=""
@@ -148,15 +148,44 @@ parse_date() {
     fi
 }
 
-# --- Build search arguments ---
-search_args=(--author "@me" --state open --limit "$LIMIT" --sort updated)
+# --- Build GraphQL search filter ---
+# Use GraphQL search syntax to fetch PRs *and* CI status in one call.
+# `gh search prs --owner X` historically accepted both users and orgs; in
+# GraphQL search syntax, `org:X` is the closest equivalent and works for
+# organizations (the typical case).
+search_filter="is:open is:pr author:@me archived:false sort:updated-desc"
 if [[ -n "$OWNER" ]]; then
-    search_args=(--owner "$OWNER" "${search_args[@]}")
+    search_filter="${search_filter} org:${OWNER}"
 fi
 
-# --- Fetch PRs ---
-json=$(gh search prs "${search_args[@]}" \
-    --json number,title,repository,isDraft,updatedAt,createdAt,url 2>/dev/null) || {
+graphql_query=$(cat <<EOF
+{
+  search(query: "${search_filter}", type: ISSUE, first: ${LIMIT}) {
+    nodes {
+      ... on PullRequest {
+        number
+        title
+        url
+        isDraft
+        updatedAt
+        createdAt
+        repository { nameWithOwner }
+        commits(last: 1) {
+          nodes {
+            commit {
+              statusCheckRollup { state }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+EOF
+)
+
+# --- Fetch PRs (single GraphQL call: PR data + CI status) ---
+json=$(gh api graphql -f query="$graphql_query" --jq '.data.search.nodes' 2>/dev/null) || {
     printf '%s\n' "${RED}Error: failed to fetch PRs from GitHub${RESET}" >&2
     exit 1
 }
@@ -178,7 +207,7 @@ six_months_ago=$(( now_epoch - 6 * 30 * 86400 ))
 one_month_ago=$(( now_epoch - 30 * 86400 ))
 
 # --- Build rows: tab-separated fields ---
-# Fields: repo, number, title, draft, updated, created, url
+# Fields: repo, number, title, draft, updated, created, url, ci_state
 rows=$(echo "$json" | jq -r '.[] | [
     .repository.nameWithOwner,
     (.number|tostring),
@@ -186,7 +215,8 @@ rows=$(echo "$json" | jq -r '.[] | [
     (if .isDraft then "1" else "0" end),
     .updatedAt,
     .createdAt,
-    .url
+    .url,
+    (.commits.nodes[0].commit.statusCheckRollup.state // "NONE")
 ] | @tsv')
 
 # --- Determine repo column display ---
@@ -197,7 +227,7 @@ max_repo=4    # "Repo"
 max_num=1     # "#"
 max_title=5   # "Title"
 
-while IFS=$'\t' read -r repo num title _ _ _ _; do
+while IFS=$'\t' read -r repo num title _ _ _ _ _; do
     if [[ -n "$OWNER" ]]; then
         repo_display="${repo#*/}"
     else
@@ -219,6 +249,8 @@ max_num=$(( max_num + 1 ))
 max_date=10
 # Age column max is "⚠ stale (>6mo)" = 14 visible chars
 max_age=14
+# CI column: 1 visible glyph (Nerd Font / emoji), padded to 2 cells
+max_ci=2
 
 # --- Decide rendering mode ---
 # Picker mode (default): interactive gum filter, no static table.
@@ -231,9 +263,9 @@ else
 fi
 
 # --- Build header strings (used either as printed table header or gum header) ---
-plain_header=$(printf "%-${max_repo}s  %-${max_num}s  %-${max_title}s  %-${max_date}s  %-${max_age}s" \
-    "Repo" "#" "Title" "Updated" "Age")
-sep_len=$(( max_repo + max_num + max_title + max_date + max_age + 8 ))
+plain_header=$(printf "%-${max_repo}s  %-${max_num}s  %-${max_title}s  %-${max_ci}s  %-${max_date}s  %-${max_age}s" \
+    "Repo" "#" "Title" "CI" "Updated" "Age")
+sep_len=$(( max_repo + max_num + max_title + max_ci + max_date + max_age + 10 ))
 sep_str=$(printf "%${sep_len}s" "" | tr ' ' '-')
 
 # Print the table header only in table mode
@@ -249,7 +281,7 @@ display_rows=()  # rows with OSC 8 hyperlinks (for terminal display)
 picker_rows=()   # rows without OSC 8 (for gum filter — gum doesn't render OSC 8)
 url_list=()      # parallel array of URLs
 
-while IFS=$'\t' read -r repo num title draft updated created url; do
+while IFS=$'\t' read -r repo num title draft updated created url ci_state; do
     # Repo display
     if [[ -n "$OWNER" ]]; then
         repo_display="${repo#*/}"
@@ -296,12 +328,33 @@ while IFS=$'\t' read -r repo num title draft updated created url; do
         title_color="$RESET"
     fi
 
+    # CI status glyph + color (Nerd Font / emoji)
+    case "$ci_state" in
+        SUCCESS)
+            ci_text=""
+            ci_color="$GREEN"
+            ;;
+        FAILURE|ERROR)
+            ci_text=""
+            ci_color="$RED"
+            ;;
+        PENDING|EXPECTED)
+            ci_text=""
+            ci_color="$YELLOW"
+            ;;
+        *)
+            ci_text="·"
+            ci_color="$GRAY"
+            ;;
+    esac
+
     # Pre-pad each field to its column width using plain text (no ANSI codes),
     # then wrap with colors and hyperlinks. This avoids printf counting escape
     # sequences in widths.
     repo_padded=$(printf "%-${max_repo}s" "$repo_display")
     num_padded=$(printf "%-${max_num}s" "$num_text")
     title_padded=$(printf "%-${max_title}s" "$title")
+    ci_padded=$(printf "%-${max_ci}s" "$ci_text")
     date_padded=$(printf "%-${max_date}s" "$updated_short")
     age_padded=$(printf "%-${max_age}s" "$age_text")
 
@@ -309,9 +362,9 @@ while IFS=$'\t' read -r repo num title draft updated created url; do
     num_linked=$(hyperlink "$url" "$num_padded")
 
     # Display row: with OSC 8 hyperlinks
-    display_row="${repo_padded}  ${num_color}${num_linked}${RESET}  ${title_color}${title_padded}${RESET}  ${DIM}${date_padded}${RESET}  ${age_color}${age_padded}${RESET}"
+    display_row="${repo_padded}  ${num_color}${num_linked}${RESET}  ${title_color}${title_padded}${RESET}  ${ci_color}${ci_padded}${RESET}  ${DIM}${date_padded}${RESET}  ${age_color}${age_padded}${RESET}"
     # Picker row: same colors but no OSC 8 hyperlinks (gum doesn't render them)
-    picker_row="${repo_padded}  ${num_color}${num_padded}${RESET}  ${title_color}${title_padded}${RESET}  ${DIM}${date_padded}${RESET}  ${age_color}${age_padded}${RESET}"
+    picker_row="${repo_padded}  ${num_color}${num_padded}${RESET}  ${title_color}${title_padded}${RESET}  ${ci_color}${ci_padded}${RESET}  ${DIM}${date_padded}${RESET}  ${age_color}${age_padded}${RESET}"
 
     display_rows+=("$display_row")
     picker_rows+=("$picker_row")
@@ -327,7 +380,7 @@ done <<< "$rows"
 draft_count=$(echo "$json" | jq '[.[] | select(.isDraft)] | length')
 # Compute stale count in bash (cross-platform date handling) instead of awk shell-out
 stale_count=0
-while IFS=$'\t' read -r _ _ _ _ updated _ _; do
+while IFS=$'\t' read -r _ _ _ _ updated _ _ _; do
     [[ -z "$updated" ]] && continue
     epoch=$(parse_date "$updated" '%s')
     [[ -z "$epoch" ]] && continue

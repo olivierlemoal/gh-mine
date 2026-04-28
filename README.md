@@ -61,8 +61,9 @@ sudo apt install jq
 
 ## Features
 
-- **Fast** — single `gh search` query, no TUI to initialize.
+- **Fast** — single GraphQL query (PR data + CI status), no TUI to initialize.
 - **Cross-repo** — shows all your open PRs across every repo you contribute to.
+- **CI status** — at-a-glance check rollup state (success / failure / pending).
 - **Color-coded age** — `fresh` (green), `old (>1mo)` (yellow),
   `⚠ stale (>6mo)` (red).
 - **Draft markers** — drafts shown in gray with a `*` suffix.
@@ -74,17 +75,21 @@ sudo apt install jq
 - **Cross-platform date handling** — works on Linux (GNU date) and
   macOS (BSD date).
 
+> **Note**: the CI column uses Nerd Font glyphs. If your terminal doesn't have
+> a Nerd Font configured, you'll see boxes — install [a Nerd Font](https://www.nerdfonts.com/)
+> or fall back to looking at age & security indicators.
+
 ## Examples
 
 Filter by owner:
 
 ```sh
 $ gh mine --owner my-org --table
-Repo                  #       Title                                       Updated     Age
------------------------------------------------------------------------------------------------
-my-org/api            #421    feat: add /healthz endpoint                 2026-04-28  fresh
-my-org/web            #89     fix(security): sanitize user input          2026-03-12  old (>1mo)
-my-org/legacy         #3      chore: bump deps                            2025-08-04  ⚠ stale (>6mo)
+Repo                  #       Title                                       CI  Updated     Age
+---------------------------------------------------------------------------------------------------
+my-org/api            #421    feat: add /healthz endpoint                 ✓   2026-04-28  fresh
+my-org/web            #89     fix(security): sanitize user input          ✗   2026-03-12  old (>1mo)
+my-org/legacy         #3      chore: bump deps                            ·   2025-08-04  ⚠ stale (>6mo)
 
 3 open PR(s) (owner: my-org) — 1 stale ⚠
 ```
