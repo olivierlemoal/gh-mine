@@ -462,6 +462,7 @@ selected=$(gum filter \
     --prompt="❯ " \
     --prompt.foreground="6" \
     --height=20 \
+    --no-fuzzy \
     --no-strict \
     --no-show-help \
     -- "${picker_rows[@]}")
