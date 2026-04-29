@@ -472,7 +472,6 @@ selected=$(gum filter \
     --prompt.foreground="141" \
     --height=20 \
     --no-fuzzy \
-    --no-strict \
     --no-show-help \
     -- "${picker_rows[@]}")
 gum_status=$?
