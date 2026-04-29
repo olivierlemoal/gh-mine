@@ -170,6 +170,9 @@ graphql_query=$(cat <<EOF
         updatedAt
         createdAt
         repository { nameWithOwner }
+        labels(first: 20) {
+          nodes { name }
+        }
         commits(last: 1) {
           nodes {
             commit {
@@ -207,7 +210,7 @@ six_months_ago=$(( now_epoch - 6 * 30 * 86400 ))
 one_month_ago=$(( now_epoch - 30 * 86400 ))
 
 # --- Build rows: tab-separated fields ---
-# Fields: repo, number, title, draft, updated, created, url, ci_state
+# Fields: repo, number, title, draft, updated, created, url, ci_state, labels
 rows=$(echo "$json" | jq -r '.[] | [
     .repository.nameWithOwner,
     (.number|tostring),
@@ -216,7 +219,8 @@ rows=$(echo "$json" | jq -r '.[] | [
     .updatedAt,
     .createdAt,
     .url,
-    (.commits.nodes[0].commit.statusCheckRollup.state // "NONE")
+    (.commits.nodes[0].commit.statusCheckRollup.state // "NONE"),
+    ((.labels.nodes // []) | map(.name) | join(","))
 ] | @tsv')
 
 # --- Determine repo column display ---
@@ -227,7 +231,7 @@ max_repo=4    # "Repo"
 max_num=1     # "#"
 max_title=5   # "Title"
 
-while IFS=$'\t' read -r repo num title _ _ _ _ _; do
+while IFS=$'\t' read -r repo num title _ _ _ _ _ _; do
     if [[ -n "$OWNER" ]]; then
         repo_display="${repo#*/}"
     else
@@ -281,7 +285,7 @@ display_rows=()  # rows with OSC 8 hyperlinks (for terminal display)
 picker_rows=()   # rows without OSC 8 (for gum filter — gum doesn't render OSC 8)
 url_list=()      # parallel array of URLs
 
-while IFS=$'\t' read -r repo num title draft updated created url ci_state; do
+while IFS=$'\t' read -r repo num title draft updated created url ci_state labels; do
     # Repo display
     if [[ -n "$OWNER" ]]; then
         repo_display="${repo#*/}"
@@ -321,8 +325,8 @@ while IFS=$'\t' read -r repo num title draft updated created url ci_state; do
         num_color="$BLUE"
     fi
 
-    # Title color (red for security)
-    if [[ "$title" =~ ^fix\(security\) ]] || [[ "$title" =~ [Ss]ecurity ]]; then
+    # Title color (red if PR has 'security' label)
+    if [[ ",${labels}," == *,security,* ]]; then
         title_color="$RED"
     else
         title_color="$RESET"
@@ -384,7 +388,7 @@ done <<< "$rows"
 draft_count=$(echo "$json" | jq '[.[] | select(.isDraft)] | length')
 # Compute stale count in bash (cross-platform date handling) instead of awk shell-out
 stale_count=0
-while IFS=$'\t' read -r _ _ _ _ updated _ _ _; do
+while IFS=$'\t' read -r _ _ _ _ updated _ _ _ _; do
     [[ -z "$updated" ]] && continue
     epoch=$(parse_date "$updated" '%s')
     [[ -z "$epoch" ]] && continue
