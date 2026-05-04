@@ -67,8 +67,7 @@ sudo apt install jq
 - **Color-coded age** — `fresh` (green), `old (>1mo)` (yellow),
   `⚠ stale (>6mo)` (red).
 - **Draft markers** — drafts shown in gray with a `*` suffix.
-- **Security highlight** — PRs with `fix(security)` or "security" in the title
-  are flagged in red.
+- **Security highlight** — PRs carrying a `security` label are flagged in red.
 - **Clickable PR numbers** — OSC 8 hyperlinks on supported terminals.
 - **Pipe-friendly** — auto-falls back to `--table` mode on non-TTY (no ANSI
   bytes leaking into your scripts).
